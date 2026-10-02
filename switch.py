@@ -21,6 +21,7 @@ account-level variables, so for users it is written to every owned repo.
 import datetime as dt
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -57,7 +58,9 @@ def api(token, method, path, body=None, ok404=False):
     except urllib.error.HTTPError as e:
         if ok404 and e.code == 404:
             return None
-        raise RuntimeError(f"{method} {url}: {e.code} {e.read()[:300]!r}") from e
+        # No repo names or response bodies: this repo's Actions logs are public.
+        endpoint = re.sub(r"/repos/([^/]+)/[^/]+", r"/repos/\1/*", url.split("?")[0])
+        raise RuntimeError(f"{method} {endpoint}: HTTP {e.code}") from e
 
 
 def paged(token, path, key):
@@ -185,7 +188,8 @@ def run_owner(owner, force):
         hits = owner.billing_failures(repos, LOOKBACK_HOURS)
         if hits:
             new_mode = "self-hosted"
-            reason = "billing refusals: " + ", ".join(f"{r}#{run['id']}" for r, run in hits[:5])
+            # Counts only: this repo's logs are public and the repos are private.
+            reason = f"{len(hits)} run(s) refused for billing"
         elif owner.usage_exhausted():
             new_mode, reason = "self-hosted", "included minutes nearly exhausted"
 
@@ -198,13 +202,18 @@ def run_owner(owner, force):
         summary(f"**{owner.name}**: `{mode}` (no change)")
 
     if new_mode == "self-hosted":
+        rerun = skipped = 0
         for repo, run in owner.billing_failures(repos, RERUN_HOURS):
+            if not run["created_at"].startswith(MONTH):
+                continue  # last month's quota, already reset
             if run["run_attempt"] >= MAX_ATTEMPT:
-                print(f"  not re-running {repo}#{run['id']}: attempt {run['run_attempt']}")
+                skipped += 1
                 continue
             api(owner.token, "POST", f"/repos/{owner.name}/{repo}/actions/runs/{run['id']}/rerun-failed-jobs")
-            print(f"  re-ran {repo}#{run['id']} ({run['name']})")
-            summary(f"- re-ran {repo} [{run['name']}]({run['html_url']})")
+            rerun += 1
+        if rerun or skipped:
+            print(f"  re-ran {rerun} run(s); {skipped} at max attempts")
+            summary(f"- re-ran {rerun} run(s); {skipped} at max attempts")
 
 
 def summary(line):
