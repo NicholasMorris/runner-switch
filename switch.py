@@ -85,9 +85,15 @@ class Owner:
         self.skip = set(cfg.get("skip_repos", []))
 
     def repos(self):
-        path = f"/orgs/{self.name}/repos?type=all" if self.kind == "org" \
-            else "/user/repos?affiliation=owner"
-        return [r["name"] for r in paged(self.token, path, None)
+        # A GitHub App installation token lists exactly the repos it was
+        # installed on; a personal token gets a 4xx here and lists by owner.
+        try:
+            found = list(paged(self.token, "/installation/repositories", "repositories"))
+        except RuntimeError:
+            path = f"/orgs/{self.name}/repos?type=all" if self.kind == "org" \
+                else "/user/repos?affiliation=owner"
+            found = list(paged(self.token, path, None))
+        return [r["name"] for r in found
                 if not r["archived"] and r["owner"]["login"] == self.name
                 and r["name"] not in self.skip]
 

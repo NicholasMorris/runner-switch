@@ -46,13 +46,44 @@ minutes, so the switch keeps running when the accounts it manages are out.
 (Private, it would cost ~2,900 minutes a month on its own.) There are no
 `pull_request` triggers, so secrets never reach fork code.
 
-1. Fill in the secrets (created empty):
-   - `NM_TOKEN` - NicholasMorris token: `repo`, `workflow` (read runs, write repo
-     variables, re-run jobs). Add `user` scope (or fine-grained "Plan: read") to
-     enable the proactive usage check.
-   - `GEEP_TOKEN` - geep-admin token: `repo`, `admin:org` (org variables, billing usage).
-2. Make the repo public.
-3. `gh workflow enable switch.yml -R NicholasMorris/runner-switch` (disabled until then).
+1. Make the repo public and `gh workflow enable switch.yml -R NicholasMorris/runner-switch`.
+2. Credentials - see below.
+
+## Credentials: GitHub App (preferred)
+
+Each run mints two one-hour installation tokens (one per owner) with
+`actions/create-github-app-token`, so nothing long-lived and broad is stored.
+
+1. Create the app (pre-filled; check the permissions on the form):
+   <https://github.com/settings/apps/new?name=runner-switch-nm&url=https://github.com/NicholasMorris/runner-switch&public=true&webhook_active=false&actions=write&checks=read&actions_variables=write&organization_actions_variables=write&organization_administration=read>
+   - Repository: **Actions** read/write (list runs, re-run), **Checks** read
+     (billing-refusal annotations), **Variables** read/write (`RUNNER_MODE` on
+     personal repos), Metadata read (automatic).
+   - Organization: **Variables** read/write (`RUNNER_MODE` org variable),
+     **Administration** read (billing usage).
+   - Webhook off. "Any account" can install - needed to install it on both
+     your user and the geep-health org; only the private-key holder can mint
+     tokens.
+2. Install it on **NicholasMorris** (all repositories) and **geep-health**
+   (all repositories).
+3. Generate a private key, then:
+   ```bash
+   gh variable set APP_CLIENT_ID -R NicholasMorris/runner-switch --body <client id from the app page>
+   gh secret set APP_PRIVATE_KEY -R NicholasMorris/runner-switch < ~/Downloads/runner-switch-nm.*.private-key.pem
+   rm ~/Downloads/runner-switch-nm.*.private-key.pem
+   gh workflow run switch.yml -R NicholasMorris/runner-switch   # check it goes green
+   gh secret delete NM_TOKEN -R NicholasMorris/runner-switch
+   gh secret delete GEEP_TOKEN -R NicholasMorris/runner-switch
+   ```
+
+The app cannot read a personal account's billing usage, so NicholasMorris
+relies on the billing-refusal signal alone (as it already does).
+
+### Fallback: stored tokens
+
+While `APP_CLIENT_ID` is unset the workflow uses `NM_TOKEN` / `GEEP_TOKEN`:
+NicholasMorris and geep-admin tokens with `repo`, `workflow` (+ `admin:org` for
+geep). Broad - replace with the app.
 
 ## Local dry run
 
