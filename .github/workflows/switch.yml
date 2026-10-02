@@ -1,0 +1,39 @@
+name: Runner switch
+
+# This repo is public on purpose: public repos get unlimited standard
+# GitHub-hosted minutes, so the switch itself keeps running when the accounts
+# it manages are out of minutes. No pull_request triggers - secrets stay on
+# the default branch.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "auto, or force a mode until the next month rollover"
+        type: choice
+        options: [auto, hosted, self-hosted]
+        default: auto
+      owner:
+        description: "Only this owner (blank = all)"
+        type: string
+        default: ""
+
+concurrency:
+  group: runner-switch
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  switch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 switch.py
+        env:
+          NM_TOKEN: ${{ secrets.NM_TOKEN }}
+          GEEP_TOKEN: ${{ secrets.GEEP_TOKEN }}
+          FORCE_MODE: ${{ inputs.mode || 'auto' }}
+          ONLY_OWNER: ${{ inputs.owner }}

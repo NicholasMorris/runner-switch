@@ -1,0 +1,15 @@
+[
+  {
+    "name": "NicholasMorris",
+    "type": "user",
+    "token_env": "NM_TOKEN",
+    "included_minutes": 1000,
+    "skip_repos": ["runner-switch"]
+  },
+  {
+    "name": "geep-health",
+    "type": "org",
+    "token_env": "GEEP_TOKEN",
+    "included_minutes": 3000
+  }
+]
